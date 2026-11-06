@@ -50,3 +50,24 @@ Mermaid 10.9.3 включён локально в `docs/assets/vendor/`; лиц�
 - [Диаграмма классов](screenshots/practice-2-classes.png)
 
 Для сдачи: **Komarevtsev Yan — Система определения спама — https://github.com/Stolyan-2k/docs-as-code**.
+
+## Практика 3: документирование API
+
+- Спецификация: [`docs/api/openapi.yaml`](docs/api/openapi.yaml), OpenAPI 3.0.3.
+- Описание и инструкция проверки: [`docs/api/index.md`](docs/api/index.md).
+- После `mkdocs serve` откройте раздел «API», затем ссылку «Открыть Swagger UI».
+- Описаны проверка сообщения, получение результата и сохранение исправленной категории.
+- Backend не реализован; сервер условный, отправка запросов из Swagger UI отключена.
+- Скриншот: [Swagger UI с раскрытой основной операцией](screenshots/practice-3-swagger.png).
+
+Проверка контракта:
+
+```bash
+python -m pip install -r requirements-dev.txt
+python -m openapi_spec_validator docs/api/openapi.yaml
+mkdocs build --strict
+```
+
+Swagger UI 5.17.14 хранится в `docs/assets/vendor/swagger-ui/` вместе с лицензией
+Apache-2.0. Источник: https://www.npmjs.com/package/swagger-ui-dist/v/5.17.14.
+Для просмотра API внешний CDN не нужен.

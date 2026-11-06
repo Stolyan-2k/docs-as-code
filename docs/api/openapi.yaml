@@ -1,0 +1,365 @@
+openapi: 3.0.3
+info:
+  title: Система определения спама API
+  description: 'Учебный контракт API проверки русскоязычных сообщений на спам. Реальный backend не реализован;
+    сервер условный. Категории: spam — спам, ham — обычное сообщение. Решение о публикации принимает модератор.
+    Уверенность модели не гарантирует правильность результата.'
+  version: 1.0.0
+servers:
+- url: https://example.com/api/v1
+  description: Условный адрес, не работающий API.
+security:
+- bearerAuth: []
+tags:
+- name: Классификация
+  description: Проверка сообщения и получение сохранённого результата (US-01, US-02, UC-01).
+- name: Обратная связь
+  description: Исправление категории модератором (US-03).
+paths:
+  /classifications:
+    post:
+      tags:
+      - Классификация
+      operationId: createClassification
+      summary: Проверить сообщение на спам
+      description: 'Синхронно проверяет текст ML-моделью и сохраняет результат. Перед проверкой длины
+        удаляются пробельные символы по краям: допустимо 1–5000 символов Unicode после нормализации. Ограничения
+        схемы применяются к нормализованному тексту. Пустой текст и текст только из пробелов отклоняются
+        без вызова модели. Автор проверки определяется по токену; moderatorId не принимается от клиента.
+        При confidence < 0.8 manualReviewRequired=true; при confidence >= 0.8 — false. При ошибках модели
+        или хранения успешный результат не подтверждается.'
+      requestBody:
+        required: true
+        description: JSON-объект с обязательным текстом сообщения.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClassificationRequest'
+            example:
+              text: Поздравляем! Вы выиграли приз, срочно переведите комиссию.
+      responses:
+        '201':
+          description: Классификация выполнена, результат сохранён. Уверенность хранится от 0 до 1; интерфейс
+            отображает проценты.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClassificationResult'
+              example: &id001
+                id: 123
+                messageId: 45
+                moderatorId: 7
+                category: spam
+                confidence: 0.94
+                modelVersion: spam-ru-1.0.0
+                manualReviewRequired: false
+                checkedAt: '2026-11-06T10:00:00Z'
+        '400':
+          description: Невалидный JSON, неизвестные поля, неверный тип или недопустимая длина текста.
+            Модель не вызывается.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: INVALID_REQUEST
+                message: 'Передайте text: от 1 до 5000 символов после удаления пробелов по краям.'
+        '401': &id002
+          $ref: '#/components/responses/Unauthorized'
+        '502':
+          description: Модель вернула некорректную категорию, уверенность или пустую версию. Результат
+            не создаётся.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: INVALID_MODEL_RESPONSE
+                message: Не удалось получить корректный ответ модели. Повторите запрос или проверьте текст
+                  вручную.
+        '503':
+          description: ML-компонент временно недоступен. Результат не создаётся.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: MODEL_UNAVAILABLE
+                message: Модель недоступна. Повторите запрос или проверьте текст вручную.
+        '504':
+          description: Истёк срок ожидания ответа модели. Результат не создаётся.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: MODEL_TIMEOUT
+                message: Модель не ответила вовремя. Повторите запрос или проверьте текст вручную.
+        '500': &id003
+          $ref: '#/components/responses/StorageError'
+  /classifications/{id}:
+    get:
+      tags:
+      - Классификация
+      operationId: getClassification
+      summary: Получить результат проверки
+      description: Возвращает исходный результат ML-модели по идентификатору. Доступны только результаты
+        текущего модератора. Обратная связь не изменяет исходную категорию.
+      parameters:
+      - &id004
+        name: id
+        in: path
+        required: true
+        description: Идентификатор сохранённого результата классификации.
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+        example: 123
+      responses:
+        '200':
+          description: Сохранённый результат найден.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClassificationResult'
+              example: *id001
+        '400':
+          description: 'Некорректный идентификатор: ожидается целое положительное число.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: INVALID_ID
+                message: id должен быть целым числом больше нуля.
+        '401': *id002
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500': *id003
+  /classifications/{id}/feedback:
+    post:
+      tags:
+      - Обратная связь
+      operationId: createFeedback
+      summary: Сохранить исправленную категорию
+      description: Добавляет обратную связь к собственному результату модератора. correctedCategory должна
+        отличаться от исходной категории модели. Автор определяется по токену. Исходный результат не изменяется.
+        Для одного результата допускается несколько записей обратной связи; операция не запускает переобучение
+        модели.
+      parameters:
+      - *id004
+      requestBody:
+        required: true
+        description: Категория после ручной проверки.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeedbackRequest'
+            example:
+              correctedCategory: ham
+      responses:
+        '201':
+          description: Исправление сохранено и связано с результатом и модератором.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Feedback'
+              example:
+                id: 8
+                classificationId: 123
+                moderatorId: 7
+                correctedCategory: ham
+                createdAt: '2026-11-06T10:05:00Z'
+        '400':
+          description: Невалидный JSON, неизвестное поле, некорректный id или категория вне spam/ham.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: INVALID_REQUEST
+                message: 'Передайте положительный id и correctedCategory: spam или ham.'
+        '401': *id002
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Исправленная категория совпадает с исходной категорией модели; запись не создаётся.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: CATEGORY_UNCHANGED
+                message: Выберите категорию, отличающуюся от исходной.
+        '500': *id003
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Планируемая авторизация модератора по токену. Выдача токенов вне области этой практики.
+        Настоящие токены для просмотра документации не нужны.
+  schemas:
+    Category:
+      type: string
+      enum:
+      - spam
+      - ham
+      description: spam — спам; ham — обычное сообщение.
+      example: spam
+    ClassificationRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - text
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 5000
+          pattern: \S
+          description: Русскоязычный текст сообщения; длина проверяется после удаления пробельных символов
+            по краям. Строка только из пробелов недопустима.
+          example: Поздравляем! Вы выиграли приз.
+    ClassificationResult:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - messageId
+      - moderatorId
+      - category
+      - confidence
+      - modelVersion
+      - manualReviewRequired
+      - checkedAt
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Идентификатор результата.
+          example: 123
+        messageId:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Идентификатор проверенного сообщения.
+          example: 45
+        moderatorId:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Идентификатор модератора, определённый по токену.
+          example: 7
+        category:
+          $ref: '#/components/schemas/Category'
+        confidence:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: Уверенность в предсказанной категории; 0.94 отображается как 94 %.
+          example: 0.94
+        modelVersion:
+          type: string
+          minLength: 1
+          pattern: \S
+          description: Непустая версия использованной модели.
+          example: spam-ru-1.0.0
+        manualReviewRequired:
+          type: boolean
+          description: true, если confidence < 0.8; иначе false. Порог предварительный.
+          example: false
+        checkedAt:
+          type: string
+          format: date-time
+          description: Время проверки в RFC 3339.
+          example: '2026-11-06T10:00:00Z'
+    FeedbackRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - correctedCategory
+      properties:
+        correctedCategory:
+          $ref: '#/components/schemas/Category'
+    Feedback:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - classificationId
+      - moderatorId
+      - correctedCategory
+      - createdAt
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+          example: 8
+        classificationId:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Результат, к которому относится исправление.
+          example: 123
+        moderatorId:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Автор обратной связи, определённый по токену.
+          example: 7
+        correctedCategory:
+          $ref: '#/components/schemas/Category'
+        createdAt:
+          type: string
+          format: date-time
+          example: '2026-11-06T10:05:00Z'
+    Error:
+      type: object
+      additionalProperties: false
+      required:
+      - code
+      - message
+      properties:
+        code:
+          type: string
+          minLength: 1
+          description: Машиночитаемый код причины ошибки.
+          example: INVALID_REQUEST
+        message:
+          type: string
+          minLength: 1
+          description: Понятное описание причины и возможного действия.
+          example: Передайте непустой текст сообщения.
+  responses:
+    Unauthorized:
+      description: Нет действующего токена модератора.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: UNAUTHORIZED
+            message: Требуется действующий токен модератора.
+    NotFound:
+      description: Результат не найден или недоступен текущему модератору.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: RESULT_NOT_FOUND
+            message: Результат проверки не найден.
+    StorageError:
+      description: Ошибка сохранения или чтения; успешная операция не подтверждается.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: STORAGE_ERROR
+            message: Не удалось сохранить или прочитать данные. Повторите запрос.

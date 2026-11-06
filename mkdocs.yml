@@ -18,6 +18,7 @@ nav:
       - Описание: project/overview.md
       - Требования: project/requirements.md
       - Диаграммы: project/diagrams.md
+  - API: api/index.md
 
 extra_javascript:
   - assets/vendor/mermaid-10.9.3.min.js

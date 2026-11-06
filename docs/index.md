@@ -38,3 +38,8 @@
 - [Описание и комплект документации](project/overview.md)
 - [User Stories и Use Case](project/requirements.md)
 - [Диаграммы последовательности и классов](project/diagrams.md)
+
+## Практика 3: документирование API
+
+[API системы определения спама](api/index.md): спецификация OpenAPI 3.0.3,
+три операции, схемы запросов и ответов, ошибки и локальный Swagger UI.
