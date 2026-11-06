@@ -1,0 +1,16 @@
+site_name: Docs as Code
+site_description: Практическая работа Yan Komarevtsev по настройке Docs as Code.
+site_author: Yan Komarevtsev
+repo_url: https://github.com/Stolyan-2k/docs-as-code
+
+theme:
+  name: readthedocs
+  locale: ru
+  highlightjs: false
+
+plugins:
+  - search:
+      lang: [ru, en]
+
+nav:
+  - Главная: index.md
