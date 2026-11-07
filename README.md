@@ -49,7 +49,6 @@ Mermaid 10.9.3 включён локально в `docs/assets/vendor/`; лиц�
 - [Диаграмма последовательности](screenshots/practice-2-sequence.png)
 - [Диаграмма классов](screenshots/practice-2-classes.png)
 
-Для сдачи: **Komarevtsev Yan — Система определения спама — https://github.com/Stolyan-2k/docs-as-code**.
 
 ## Практика 3: документирование API
 
